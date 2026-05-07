@@ -43,9 +43,7 @@ def compute_summarization_metrics(
 
     # BLEU
     bleu = evaluate.load("bleu")
-    bleu_preds = [p.split() for p in predictions]
-    bleu_refs = [[ref.split()] for ref in references]
-    b = bleu.compute(predictions=bleu_preds, references=bleu_refs)
+    b = bleu.compute(predictions=predictions, references=[[ref] for ref in references])
 
     # METEOR
     meteor = evaluate.load("meteor")

@@ -21,18 +21,15 @@ def generate_bart_summaries(
     cfg: Q3Config = Q3Config(),
     verbose: bool = True,
 ) -> list[str]:
-    from transformers import pipeline
+    from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    device = 0 if torch.cuda.is_available() else -1
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
     print(f"Loading BART model: {cfg.bart_model}")
-    bart_pipe = pipeline(
-        "summarization",
-        model=cfg.bart_model,
-        device=device,
-        torch_dtype=dtype,
-    )
+    tokenizer = AutoTokenizer.from_pretrained(cfg.bart_model)
+    model = AutoModelForSeq2SeqLM.from_pretrained(cfg.bart_model, torch_dtype=dtype).to(device)
+    model.eval()
 
     articles_trunc = [truncate_words(a, cfg.bart_max_input_words) for a in articles]
     summaries = []
@@ -43,16 +40,18 @@ def generate_bart_summaries(
     print(f"Generating BART summaries (batch_size={bs})...")
     for i in range(0, n, bs):
         batch = articles_trunc[i : i + bs]
-        outputs = bart_pipe(
-            batch,
-            max_length=cfg.bart_max_output_length,
-            min_length=cfg.bart_min_output_length,
-            length_penalty=2.0,
-            num_beams=cfg.bart_num_beams,
-            early_stopping=True,
-            truncation=True,
-        )
-        summaries.extend([o["summary_text"] for o in outputs])
+        inputs = tokenizer(batch, return_tensors="pt", truncation=True, padding=True, max_length=1024).to(device)
+        with torch.no_grad():
+            output_ids = model.generate(
+                **inputs,
+                max_length=cfg.bart_max_output_length,
+                min_length=cfg.bart_min_output_length,
+                length_penalty=2.0,
+                num_beams=cfg.bart_num_beams,
+                early_stopping=True,
+            )
+        batch_summaries = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        summaries.extend(batch_summaries)
         if verbose and (i + bs) % 100 == 0:
             print(f"  BART: {min(i + bs, n)}/{n} completed")
 
