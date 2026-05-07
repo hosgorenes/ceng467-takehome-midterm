@@ -9,3 +9,9 @@ seaborn
 nltk
 seqeval
 torchcrf
+sumy
+rouge-score
+bert-score
+sacrebleu
+evaluate
+sentencepiece
